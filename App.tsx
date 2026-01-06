@@ -200,7 +200,7 @@ const App: React.FC = () => {
           <div className="bg-black p-2.5 rounded-2xl shadow-lg transform group-hover:rotate-12 transition-transform">
             <Layout size={24} className="text-white" />
           </div>
-          <span className="text-2xl font-black tracking-tighter">ARSLIDE</span>
+          <span className="text-2xl font-black tracking-tighter">ARABICSLIDES</span>
         </div>
         <div className="flex gap-4">
           {state.step !== AppStep.INTRO && (
