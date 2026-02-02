@@ -1,6 +1,6 @@
 
 import pptxgen from 'pptxgenjs';
-import { ExcelRow, ColumnMapping, IndexPosition, AspectRatio } from '../types';
+import { ExcelRow, ColumnMapping, IndexPosition, AspectRatio, ThemeMode } from '../types';
 
 export const generatePptx = async (
   data: ExcelRow[], 
@@ -14,7 +14,8 @@ export const generatePptx = async (
   indexFormat: string,
   aspectRatio: AspectRatio,
   slideWidth: number,
-  slideHeight: number
+  slideHeight: number,
+  themeMode: ThemeMode
 ): Promise<void> => {
   const pptx = new pptxgen();
   
@@ -27,6 +28,10 @@ export const generatePptx = async (
 
   data.forEach((row) => {
     const slide = pptx.addSlide();
+    const bgColor = themeMode === 'dark' ? '000000' : 'FFFFFF';
+    const textColor = themeMode === 'dark' ? 'FFFFFF' : '000000';
+
+    slide.background = { color: bgColor };
 
     Object.entries(mapping).forEach(([key, style]) => {
       if (!style.column || !row[style.column]) return;
@@ -43,7 +48,7 @@ export const generatePptx = async (
         h: `${style.h}%`,
         fontSize: style.fontSize,
         align: 'center',
-        color: '000000',
+        color: textColor,
         fontFace: isBox1 ? 'Scheherazade New' : 'Arial',
         rtl: isBox1,
         bold: isBox2,
@@ -62,12 +67,12 @@ export const generatePptx = async (
         if (indexPosition === 'content-bottom-right') {
           slide.addText(refText, {
             x: '75%', y: '90%', w: '20%', h: '5%',
-            fontSize: 12, fontFace: 'Arial', align: 'right', color: '888888'
+            fontSize: 12, fontFace: 'Arial', align: 'right', color: textColor
           });
         } else {
           slide.addText(refText, {
             x: '2%', y: '94%', w: '96%', h: '5%',
-            fontSize: 10, fontFace: 'Arial', align: 'right', color: 'AAAAAA'
+            fontSize: 10, fontFace: 'Arial', align: 'right', color: textColor
           });
         }
       }
