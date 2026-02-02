@@ -31,6 +31,7 @@ export enum AppStep {
 export type RowSelectionMode = 'all' | 'range' | 'specific';
 export type IndexPosition = 'content-bottom-right' | 'footer';
 export type AspectRatio = '16:9' | '4:3' | 'Custom';
+export type ThemeMode = 'light' | 'dark';
 
 export interface AppState {
   step: AppStep;
@@ -52,4 +53,5 @@ export interface AppState {
   aspectRatio: AspectRatio;
   slideWidth: number;
   slideHeight: number;
+  themeMode: ThemeMode;
 }

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Upload, FileSpreadsheet, Layout, PlayCircle, CheckCircle, AlertCircle, ArrowLeft, Download, RotateCcw, ChevronRight, Layers, Settings2, Maximize, Move, Ruler, List, Info, HelpCircle, BookOpen, MousePointer2, FileText, Presentation } from 'lucide-react';
-import { AppStep, AppState, ColumnMapping, RowSelectionMode, IndexPosition, ColumnStyle, AspectRatio } from './types';
+import { AppStep, AppState, ColumnMapping, RowSelectionMode, IndexPosition, ColumnStyle, AspectRatio, ThemeMode } from './types';
 import { parseExcelFile, getDefaultMapping } from './services/excelService';
 import { generatePptx } from './services/pptxService';
 
@@ -31,7 +31,8 @@ const App: React.FC = () => {
     indexFormat: '{1}:{2}',
     aspectRatio: '16:9',
     slideWidth: 1920,
-    slideHeight: 1080
+    slideHeight: 1080,
+    themeMode: 'light'
   });
 
   const [hoveredField, setHoveredField] = useState<string | null>(null);
@@ -40,6 +41,8 @@ const App: React.FC = () => {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   
   const previewRef = useRef<HTMLDivElement>(null);
+  const previewSlideRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
   const [dragAction, setDragAction] = useState<{ key: keyof ColumnMapping, type: 'move' | 'resize', startX: number, startY: number, initialX: number, initialY: number, initialW: number, initialH: number } | null>(null);
 
   const processFile = async (file: File) => {
@@ -107,6 +110,32 @@ const App: React.FC = () => {
     };
   }, [dragAction, handleMouseMove, handleMouseUp]);
 
+  useEffect(() => {
+    const el = previewSlideRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      const denom = state.slideWidth || 1;
+      setPreviewScale(rect.width / denom);
+    };
+
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [state.slideWidth, state.step]);
+
+  const ptToPreviewPx = useCallback((pt: number) => {
+    // PPT points -> CSS px at 96dpi, then scaled to the preview's rendered width.
+    return pt * (96 / 72) * previewScale;
+  }, [previewScale]);
+
   const startInteraction = (e: React.MouseEvent, key: keyof ColumnMapping, type: 'move' | 'resize') => {
     e.stopPropagation();
     setSelectedDesignerBox(key);
@@ -156,7 +185,7 @@ const App: React.FC = () => {
       await generatePptx(
         filteredData, state.mapping, state.file.name, state.columns, 
         state.includeIndex, state.indexPosition, state.indexCol1, state.indexCol2, state.indexFormat,
-        state.aspectRatio, state.slideWidth, state.slideHeight
+        state.aspectRatio, state.slideWidth, state.slideHeight, state.themeMode
       );
       setState(prev => ({ ...prev, step: AppStep.DOWNLOAD, isGenerating: false }));
     } catch (err: any) {
@@ -191,6 +220,9 @@ const App: React.FC = () => {
     let fmt = state.indexFormat || '{1}:{2}';
     return fmt.replace('{1}', val1).replace('{2}', val2);
   };
+
+  const themeBg = state.themeMode === 'dark' ? '#000000' : '#FFFFFF';
+  const themeText = state.themeMode === 'dark' ? '#FFFFFF' : '#000000';
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center py-10 px-4">
@@ -437,6 +469,28 @@ const App: React.FC = () => {
                       <label className="text-[10px] font-black text-zinc-300 uppercase tracking-widest block">Index Placement</label>
                     </div>
 
+                    <div className="mb-8">
+                      <label className="text-[9px] font-black text-zinc-300 uppercase tracking-widest block mb-3">Theme (PPTX Output)</label>
+                      <div className="flex gap-2">
+                        {(['light', 'dark'] as ThemeMode[]).map(mode => (
+                          <button
+                            key={mode}
+                            onClick={() => setState(prev => ({ ...prev, themeMode: mode }))}
+                            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                              state.themeMode === mode
+                                ? 'bg-black text-white border-black shadow-md'
+                                : 'bg-white text-zinc-300 border-zinc-100 hover:text-black hover:border-black'
+                            }`}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-[10px] font-bold text-zinc-400 leading-relaxed">
+                        Light mode exports with white background + black text. Dark mode exports with black background + white text.
+                      </p>
+                    </div>
+
                     <div className="flex items-center gap-4 mb-6 group cursor-pointer" onClick={() => setState(prev => ({ ...prev, includeIndex: !prev.includeIndex }))}>
                       <div className={`w-12 h-6 rounded-full transition-colors relative ${state.includeIndex ? 'bg-black' : 'bg-zinc-200'}`}>
                         <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${state.includeIndex ? 'translate-x-7' : 'translate-x-1'}`} />
@@ -617,8 +671,17 @@ const App: React.FC = () => {
                 <button onClick={() => setState(prev => ({ ...prev, step: AppStep.MAPPING }))} className="text-zinc-400 hover:text-black font-black text-xs uppercase tracking-[0.2em] flex items-center gap-2 transition-colors"><ArrowLeft size={16} /> BACK TO DESIGNER</button>
               </div>
 
-              <div className="relative mx-auto bg-black rounded-[4rem] shadow-2xl overflow-hidden border border-zinc-900 p-0 mb-20 ring-4 ring-zinc-50" style={{ maxWidth: '960px', aspectRatio: `${state.slideWidth}/${state.slideHeight}` }}>
-                <div className="absolute inset-0 bg-white m-5 rounded-[3rem] overflow-hidden shadow-inner">
+              <div
+                ref={previewSlideRef}
+                className="relative mx-auto rounded-[2.5rem] shadow-2xl overflow-hidden border border-zinc-200 mb-20 ring-4 ring-zinc-50"
+                style={{
+                  width: '100%',
+                  maxWidth: '960px',
+                  aspectRatio: `${state.slideWidth}/${state.slideHeight}`,
+                  backgroundColor: themeBg
+                }}
+              >
+                <div className="absolute inset-0">
                   {(Object.entries(state.mapping) as [keyof ColumnMapping, ColumnStyle][]).map(([key, style]) => {
                     if (!style.column || !filteredData[0]?.[style.column]) return null;
                     const val = String(filteredData[0][style.column]);
@@ -629,8 +692,10 @@ const App: React.FC = () => {
                         className={`absolute text-center flex items-center justify-center leading-relaxed ${isBox1 ? 'arabic-font' : ''}`}
                         style={{ 
                           left: `${style.x}%`, top: `${style.y}%`, width: `${style.w}%`, height: `${style.h}%`, 
-                          fontSize: `${style.fontSize}pt`,
+                          fontSize: `${ptToPreviewPx(style.fontSize)}px`,
                           fontFamily: isBox1 ? 'Scheherazade New' : 'Arial',
+                          color: themeText,
+                          direction: isBox1 ? 'rtl' : 'ltr',
                           fontWeight: key === 'box2' ? 'bold' : 'normal',
                           fontStyle: key === 'box3' ? 'italic' : 'normal'
                         }}
@@ -640,7 +705,23 @@ const App: React.FC = () => {
                     );
                   })}
                   {state.includeIndex && (
-                    <div className={`absolute text-zinc-400 font-black ${state.indexPosition === 'content-bottom-right' ? 'right-14 bottom-12 text-2xl' : 'right-8 bottom-4 text-base'}`}>
+                    <div
+                      className="absolute font-black"
+                      style={{
+                        left: state.indexPosition === 'content-bottom-right' ? '75%' : '2%',
+                        top: state.indexPosition === 'content-bottom-right' ? '90%' : '94%',
+                        width: state.indexPosition === 'content-bottom-right' ? '20%' : '96%',
+                        height: '5%',
+                        fontFamily: 'Arial',
+                        fontSize: `${ptToPreviewPx(state.indexPosition === 'content-bottom-right' ? 12 : 10)}px`,
+                        color: themeText,
+                        textAlign: 'right',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        paddingRight: ptToPreviewPx(4)
+                      }}
+                    >
                       {getPreviewIndex()}
                     </div>
                   )}
